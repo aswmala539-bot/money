@@ -962,13 +962,56 @@
         // -------------------------------------------------------------
         // CLOUD & LOCAL STORAGE SYNC
         // -------------------------------------------------------------
+    <script>
+        let transactions = [];
+        let savingsList = [];
+        let debtsList = [];
+        let db = null;
+        let currentTxType = 'income';
+        const appId = 'default_app';
+
+        // Parse JSON or JS object format from input string
+        function parseFirebaseConfigInput(inputStr) {
+            if (!inputStr) return null;
+            try {
+                return JSON.parse(inputStr);
+            } catch (e) {
+                try {
+                    const cleanStr = inputStr
+                        .replace(/(const|let|var)\s+\w+\s*=\s*/, '')
+                        .replace(/;\s*$/, '');
+                    return (new Function(`return ${cleanStr}`))();
+                } catch (err) {
+                    return null;
+                }
+            }
+        }
+
+        function updateSyncBadge(isCloud = false) {
+            const syncDotPing = document.getElementById('syncDotPing');
+            const syncDot = document.getElementById('syncDot');
+            const syncText = document.getElementById('syncText');
+
+            if (!syncDotPing || !syncDot || !syncText) return;
+
+            if (isCloud) {
+                syncDotPing.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75";
+                syncDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500";
+                syncText.innerText = "متصل بالسحاب ☁️";
+            } else {
+                syncDotPing.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75";
+                syncDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500";
+                syncText.innerText = "التخزين المحلي 💾";
+            }
+        }
+
         function initCloudSync() {
             let config = null;
             const customConfigStr = localStorage.getItem('custom_firebase_config');
             if (customConfigStr) {
-                try { config = JSON.parse(customConfigStr); } catch(e) {}
+                config = parseFirebaseConfigInput(customConfigStr);
             } else if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                try { config = JSON.parse(__firebase_config); } catch(e) {}
+                config = parseFirebaseConfigInput(__firebase_config);
             }
 
             if (config && window.firebase) {
@@ -980,24 +1023,64 @@
                         transactions = [];
                         snap.forEach(doc => transactions.push({ id: doc.id, ...doc.data() }));
                         updateUI();
-                    }, () => loadLocalStorage());
+                        updateSyncBadge(true);
+                    }, () => {
+                        loadLocalStorage();
+                        updateSyncBadge(false);
+                    });
 
                     db.collection(`artifacts/${appId}/public/data/budget_savings`).onSnapshot(snap => {
                         savingsList = [];
                         snap.forEach(doc => savingsList.push({ id: doc.id, ...doc.data() }));
-                        renderSavingsUI();
+                        if (typeof renderSavingsUI === 'function') renderSavingsUI();
                     }, () => {});
 
                     db.collection(`artifacts/${appId}/public/data/budget_debts`).onSnapshot(snap => {
                         debtsList = [];
                         snap.forEach(doc => debtsList.push({ id: doc.id, ...doc.data() }));
-                        renderDebtsUI();
+                        if (typeof renderDebtsUI === 'function') renderDebtsUI();
                     }, () => {});
 
+                    updateSyncBadge(true);
                     return;
-                } catch(e) {}
+                } catch(e) {
+                    console.error("Firebase init error:", e);
+                }
             }
             loadLocalStorage();
+            updateSyncBadge(false);
+        }
+
+        function openFirebaseModal() {
+            const modal = document.getElementById('firebaseModal');
+            const input = document.getElementById('firebaseConfigInput');
+            if (modal && input) {
+                input.value = localStorage.getItem('custom_firebase_config') || '';
+                modal.classList.remove('hidden');
+            }
+        }
+
+        function closeFirebaseModal() {
+            const modal = document.getElementById('firebaseModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function saveCustomFirebaseConfig() {
+            const inputVal = document.getElementById('firebaseConfigInput').value.trim();
+            if (inputVal) {
+                const parsed = parseFirebaseConfigInput(inputVal);
+                if (parsed) {
+                    localStorage.setItem('custom_firebase_config', JSON.stringify(parsed));
+                    closeFirebaseModal();
+                    location.reload();
+                } else {
+                    alert('إعدادات Firebase غير صحيحة، يرجى التأكد من النص المنسوخ.');
+                }
+            } else {
+                localStorage.removeItem('custom_firebase_config');
+                closeFirebaseModal();
+                location.reload();
+            }
         }
 
         function loadLocalStorage() {
@@ -1010,8 +1093,8 @@
             if (d) debtsList = JSON.parse(d);
 
             updateUI();
-            renderSavingsUI();
-            renderDebtsUI();
+            if (typeof renderSavingsUI === 'function') renderSavingsUI();
+            if (typeof renderDebtsUI === 'function') renderDebtsUI();
         }
 
         function saveLocalStorage() {
@@ -1019,10 +1102,11 @@
             localStorage.setItem('family_budget_savings', JSON.stringify(savingsList));
             localStorage.setItem('family_budget_debts', JSON.stringify(debtsList));
             updateUI();
-            renderSavingsUI();
-            renderDebtsUI();
+            if (typeof renderSavingsUI === 'function') renderSavingsUI();
+            if (typeof renderDebtsUI === 'function') renderDebtsUI();
         }
-
+    </script>
+<!-- ... existing code ... -->
         // -------------------------------------------------------------
         // TRANSACTIONS HANDLING
         // -------------------------------------------------------------
